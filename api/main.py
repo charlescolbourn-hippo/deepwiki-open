@@ -55,15 +55,20 @@ import google.generativeai as genai
 from api.config import GOOGLE_API_KEY
 
 if GOOGLE_API_KEY:
+    logger.info("Starting the google ai")
     genai.configure(api_key=GOOGLE_API_KEY)
+    logger.info("Started the google ai")
 else:
     logger.warning("GOOGLE_API_KEY not configured")
 
+logger.info("About to start the backend")
 if __name__ == "__main__":
     # Get port from environment variable or use default
+    logger.info("Starting the backend")
     port = int(os.environ.get("PORT", 8001))
 
     # Import the app here to ensure environment variables are set first
+    logger.info("Importing app")
     from api.api import app
 
     logger.info(f"Starting Streaming API on port {port}")
