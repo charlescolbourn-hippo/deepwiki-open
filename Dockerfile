@@ -77,7 +77,7 @@ COPY --from=node_builder /app/.next/standalone ./
 COPY --from=node_builder /app/.next/static ./.next/static
 
 # Expose the port the app runs on
-EXPOSE ${PORT:-8001} 3000
+# EXPOSE ${PORT:-8001} 3000
 
 # Create a script to run both backend and frontend
 RUN echo '#!/bin/bash\n\
