@@ -6,7 +6,7 @@ const TARGET_SERVER_BASE_URL = process.env.SERVER_BASE_URL || 'http://localhost:
 export async function GET() {
   try {
     const targetUrl = `${TARGET_SERVER_BASE_URL}/models/config`;
-
+console.error(`Env var for URL is ${TARGET_SERVER_BASE_URL} derived from `+ process.env.SERVER_BASE_URL)
     // Make the actual request to the backend service
     const backendResponse = await fetch(targetUrl, {
       method: 'GET',
