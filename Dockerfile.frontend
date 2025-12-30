@@ -58,6 +58,10 @@ USER nextjs
 EXPOSE 3000
 
 ENV PORT=3000
+# # Set environment variables
+
+ENV NODE_ENV=production
+# ENV SERVER_BASE_URL=http://deepwiki-open-api-1:8001
 
 # server.js is created by next build from the standalone output
 # https://nextjs.org/docs/pages/api-reference/config/next-config-js/output
@@ -66,7 +70,4 @@ CMD ["node", "server.js"]
 
 
 
-# # Set environment variables
-# ENV PORT=8001
-# ENV NODE_ENV=production
-# ENV SERVER_BASE_URL=http://localhost:${PORT:-8001}
+
