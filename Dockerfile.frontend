@@ -37,7 +37,7 @@ RUN \
 # Production image, copy all the files and run next
 FROM base AS runner
 WORKDIR /app
-
+ENV SERVER_BASE_URL=http://deepwiki-open-api-1:8001
 ENV NODE_ENV=production
 ENV NODE_OPTIONS="--network-family-autoselection-attempt-timeout=500"
 # Uncomment the following line in case you want to disable telemetry during runtime.
@@ -60,8 +60,7 @@ EXPOSE 3000
 ENV PORT=3000
 # # Set environment variables
 
-ENV NODE_ENV=production
-ENV SERVER_BASE_URL=http://deepwiki-open-api-1:8001
+
 
 # server.js is created by next build from the standalone output
 # https://nextjs.org/docs/pages/api-reference/config/next-config-js/output
