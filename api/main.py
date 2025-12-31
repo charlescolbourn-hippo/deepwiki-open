@@ -51,7 +51,9 @@ if missing_vars:
     logger.warning("Some functionality may not work correctly without these variables.")
 
 # Configure Google Generative AI
+logger.warning("importing the google libs")
 import google.generativeai as genai
+logger.warning("imported the google libs")
 from api.config import GOOGLE_API_KEY
 
 if GOOGLE_API_KEY:
