@@ -11,6 +11,7 @@ from adalflow.core.types import ModelType, EmbedderOutput
 try:
     import google.generativeai as genai
     from google.generativeai.types.text_types import EmbeddingDict, BatchEmbeddingDict
+    from google.api_core.exceptions import ResourceExhausted
 except ImportError:
     raise ImportError("google-generativeai is required. Install it with 'pip install google-generativeai'")
 
@@ -185,7 +186,13 @@ class GoogleEmbedderClient(ModelClient):
 
     @backoff.on_exception(
         backoff.expo,
-        (Exception,),  # Google AI may raise various exceptions
+        (ResourceExhausted,),  # Specific handler for rate limits
+        max_time=60,  # Wait up to 60 seconds for rate limits
+        jitter=backoff.full_jitter,
+    )
+    @backoff.on_exception(
+        backoff.expo,
+        (Exception,),  # General exception handler
         max_time=5,
     )
     def call(self, api_kwargs: Dict = {}, model_type: ModelType = ModelType.UNDEFINED):

@@ -4,14 +4,25 @@
  */
 
 // Get the server base URL from environment or use default
-const SERVER_BASE_URL = process.env.SERVER_BASE_URL || 'http://localhost:8001';
+const SERVER_BASE_URL = process.env.NEXT_PUBLIC_SERVER_BASE_URL;
 
 // Convert HTTP URL to WebSocket URL
 const getWebSocketUrl = () => {
-  const baseUrl = SERVER_BASE_URL;
-  // Replace http:// with ws:// or https:// with wss://
-  const wsBaseUrl = baseUrl.replace(/^http/, 'ws');
-  return `${wsBaseUrl}/ws/chat`;
+  // If explicitly configured, use it
+  if (SERVER_BASE_URL) {
+    const wsBaseUrl = SERVER_BASE_URL.replace(/^http/, 'ws');
+    return `${wsBaseUrl}/ws/chat`;
+  }
+
+  // Otherwise, use the current window location (proxy through Next.js)
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    return `${protocol}//${host}/ws/chat`;
+  }
+
+  // Fallback for SSR or if window is undefined
+  return 'ws://localhost:8001/ws/chat';
 };
 
 export interface ChatMessage {

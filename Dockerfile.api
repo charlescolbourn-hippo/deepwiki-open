@@ -47,6 +47,7 @@ RUN if [ -n "${CUSTOM_CERT_DIR}" ]; then \
     fi
 
 ENV PATH="/opt/venv/bin:$PATH"
+ENV ADALFLOW_HOME="/tmp/.adalflow"
 
 # Copy Python dependencies
 COPY --from=py_deps /api/.venv /opt/venv

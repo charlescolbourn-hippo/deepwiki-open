@@ -1,6 +1,7 @@
 import logging
 import weakref
 import re
+import gc
 from dataclasses import dataclass
 from typing import Any, List, Tuple, Dict
 from uuid import uuid4
@@ -247,6 +248,7 @@ IMPORTANT FORMATTING RULES:
         """Initialize the database manager with local storage"""
         self.db_manager = DatabaseManager()
         self.transformed_docs = []
+        gc.collect()
 
     def _validate_and_filter_embeddings(self, documents: List) -> List:
         """
@@ -339,7 +341,10 @@ IMPORTANT FORMATTING RULES:
         elif len(valid_documents) < len(documents):
             filtered_count = len(documents) - len(valid_documents)
             logger.warning(f"Filtered out {filtered_count} documents due to embedding issues")
-
+        
+        # Help GC by clearing the size map
+        del embedding_sizes
+        
         return valid_documents
 
     def prepare_retriever(self, repo_url_or_path: str, type: str = "github", access_token: str = None,
@@ -372,7 +377,14 @@ IMPORTANT FORMATTING RULES:
         logger.info(f"Loaded {len(self.transformed_docs)} documents for retrieval")
 
         # Validate and filter embeddings to ensure consistent sizes
-        self.transformed_docs = self._validate_and_filter_embeddings(self.transformed_docs)
+        # Store in a temporary variable first to allow garbage collection of the old list
+        valid_docs = self._validate_and_filter_embeddings(self.transformed_docs)
+        
+        # Explicitly clear the old list to free memory before assignment
+        self.transformed_docs = []
+        gc.collect()
+        
+        self.transformed_docs = valid_docs
 
         if not self.transformed_docs:
             raise ValueError("No valid documents with embeddings found. Cannot create retriever.")
@@ -389,6 +401,10 @@ IMPORTANT FORMATTING RULES:
                 document_map_func=lambda doc: doc.vector,
             )
             logger.info("FAISS retriever created successfully")
+            
+            # Force another GC after building the index
+            gc.collect()
+            
         except Exception as e:
             logger.error(f"Error creating FAISS retriever: {str(e)}")
             # Try to provide more specific error information

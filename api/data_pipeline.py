@@ -8,6 +8,8 @@ import tiktoken
 import logging
 import base64
 import glob
+import shutil
+import tempfile
 from adalflow.utils import get_adalflow_default_root_path
 from adalflow.core.db import LocalDB
 from api.config import configs, DEFAULT_EXCLUDED_DIRS, DEFAULT_EXCLUDED_FILES
@@ -230,7 +232,13 @@ def read_all_documents(path: str, embedder_type: str = None, is_ollama_embedder:
         logger.info(f"Excluded directories: {excluded_dirs}")
         logger.info(f"Excluded files: {excluded_files}")
 
-    logger.info(f"Reading documents from {path}")
+    logger.info(f"Reading documents from {path} (Absolute path: {os.path.abspath(path)})")
+    if not os.path.exists(path):
+        logger.error(f"READ ERROR: Path {path} does not exist!")
+    elif not os.path.isdir(path):
+        logger.error(f"READ ERROR: Path {path} is not a directory!")
+    else:
+        logger.info(f"Directory {path} exists and contains {len(os.listdir(path))} top-level items.")
 
     def should_process_file(file_path: str, use_inclusion: bool, included_dirs: List[str], included_files: List[str],
                            excluded_dirs: List[str], excluded_files: List[str]) -> bool:
@@ -238,7 +246,7 @@ def read_all_documents(path: str, embedder_type: str = None, is_ollama_embedder:
         Determine if a file should be processed based on inclusion/exclusion rules.
 
         Args:
-            file_path (str): The file path to check
+            file_path (str): The absolute file path to check
             use_inclusion (bool): Whether to use inclusion mode
             included_dirs (List[str]): List of directories to include
             included_files (List[str]): List of files to include
@@ -248,7 +256,14 @@ def read_all_documents(path: str, embedder_type: str = None, is_ollama_embedder:
         Returns:
             bool: True if the file should be processed, False otherwise
         """
-        file_path_parts = os.path.normpath(file_path).split(os.sep)
+        # Calculate relative path from the repo root (path argument)
+        try:
+            relative_path = os.path.relpath(file_path, path)
+        except ValueError:
+            # Fallback if paths are on different drives or invalid
+            relative_path = os.path.basename(file_path)
+
+        file_path_parts = os.path.normpath(relative_path).split(os.sep)
         file_name = os.path.basename(file_path)
 
         if use_inclusion:
@@ -259,7 +274,8 @@ def read_all_documents(path: str, embedder_type: str = None, is_ollama_embedder:
             if included_dirs:
                 for included in included_dirs:
                     clean_included = included.strip("./").rstrip("/")
-                    if clean_included in file_path_parts:
+                    # Check if the clean_included directory is part of the relative path
+                    if clean_included in file_path_parts[:-1]: # Check directories only
                         is_included = True
                         break
 
@@ -274,10 +290,8 @@ def read_all_documents(path: str, embedder_type: str = None, is_ollama_embedder:
             if not included_dirs and not included_files:
                 is_included = True
             elif not included_dirs and included_files:
-                # Only file patterns specified, allow all directories
                 pass  # is_included is already set based on file patterns
             elif included_dirs and not included_files:
-                # Only directory patterns specified, allow all files in included directories
                 pass  # is_included is already set based on directory patterns
 
             return is_included
@@ -288,7 +302,13 @@ def read_all_documents(path: str, embedder_type: str = None, is_ollama_embedder:
             # Check if file is in an excluded directory
             for excluded in excluded_dirs:
                 clean_excluded = excluded.strip("./").rstrip("/")
-                if clean_excluded in file_path_parts:
+                # Check if the excluded directory appears in the relative path parts
+                # We use file_path_parts which is derived from relative_path now
+                if clean_excluded in file_path_parts[:-1]:
+                    # Special check to avoid false positives with common names like 'tmp' 
+                    # if they appear at the root level of the processing dir but aren't actually in the repo structure
+                    # relative_path handles this naturally.
+                    logger.debug(f"File {file_path} excluded because {clean_excluded} is in relative path {relative_path}")
                     is_excluded = True
                     break
 
@@ -296,17 +316,22 @@ def read_all_documents(path: str, embedder_type: str = None, is_ollama_embedder:
             if not is_excluded:
                 for excluded_file in excluded_files:
                     if file_name == excluded_file:
+                        logger.debug(f"File {file_path} excluded because it matches file pattern {excluded_file}")
                         is_excluded = True
                         break
 
             return not is_excluded
 
     # Process code files first
+    logger.info(f"Scanning for files with extensions: {code_extensions}")
     for ext in code_extensions:
-        files = glob.glob(f"{path}/**/*{ext}", recursive=True)
+        search_pattern = f"{path}/**/*{ext}"
+        files = glob.glob(search_pattern, recursive=True)
+        logger.info(f"Found {len(files)} files matching {ext} in {path}")
         for file_path in files:
             # Check if file should be processed based on inclusion/exclusion rules
             if not should_process_file(file_path, use_inclusion_mode, included_dirs, included_files, excluded_dirs, excluded_files):
+                logger.debug(f"Skipping {file_path} due to filter rules")
                 continue
 
             try:
@@ -343,11 +368,15 @@ def read_all_documents(path: str, embedder_type: str = None, is_ollama_embedder:
                 logger.error(f"Error reading {file_path}: {e}")
 
     # Then process documentation files
+    logger.info(f"Scanning for files with extensions: {doc_extensions}")
     for ext in doc_extensions:
-        files = glob.glob(f"{path}/**/*{ext}", recursive=True)
+        search_pattern = f"{path}/**/*{ext}"
+        files = glob.glob(search_pattern, recursive=True)
+        logger.info(f"Found {len(files)} files matching {ext} in {path}")
         for file_path in files:
             # Check if file should be processed based on inclusion/exclusion rules
             if not should_process_file(file_path, use_inclusion_mode, included_dirs, included_files, excluded_dirs, excluded_files):
+                logger.debug(f"Skipping {file_path} due to filter rules")
                 continue
 
             try:
@@ -712,12 +741,14 @@ def get_file_content(repo_url: str, file_path: str, repo_type: str = None, acces
 class DatabaseManager:
     """
     Manages the creation, loading, transformation, and persistence of LocalDB instances.
+    Uses temporary storage for processing to optimize I/O on Cloud Run with GCS FUSE.
     """
 
     def __init__(self):
         self.db = None
         self.repo_url_or_path = None
         self.repo_paths = None
+        self.persistent_paths = None
 
     def prepare_database(self, repo_url_or_path: str, repo_type: str = None, access_token: str = None,
                          embedder_type: str = None, is_ollama_embedder: bool = None,
@@ -748,8 +779,13 @@ class DatabaseManager:
         
         self.reset_database()
         self._create_repo(repo_url_or_path, repo_type, access_token)
-        return self.prepare_db_index(embedder_type=embedder_type, excluded_dirs=excluded_dirs, excluded_files=excluded_files,
+        documents = self.prepare_db_index(embedder_type=embedder_type, excluded_dirs=excluded_dirs, excluded_files=excluded_files,
                                    included_dirs=included_dirs, included_files=included_files)
+        
+        # Sync back to persistent storage
+        self._sync_to_persistent()
+        
+        return documents
 
     def reset_database(self):
         """
@@ -758,6 +794,7 @@ class DatabaseManager:
         self.db = None
         self.repo_url_or_path = None
         self.repo_paths = None
+        self.persistent_paths = None
 
     def _extract_repo_name_from_url(self, repo_url_or_path: str, repo_type: str) -> str:
         # Extract owner and repo name to create unique identifier
@@ -777,56 +814,119 @@ class DatabaseManager:
     def _create_repo(self, repo_url_or_path: str, repo_type: str = None, access_token: str = None) -> None:
         """
         Download and prepare all paths.
-        Paths:
-        ~/.adalflow/repos/{owner}_{repo_name} (for url, local path will be the same)
-        ~/.adalflow/databases/{owner}_{repo_name}.pkl
-
-        Args:
-            repo_type(str): Type of repository
-            repo_url_or_path (str): The URL or local path of the repository
-            access_token (str, optional): Access token for private repositories
+        Sets up both temporary paths (for processing) and persistent paths (for storage).
         """
         logger.info(f"Preparing repo storage for {repo_url_or_path}...")
 
         try:
-            # Strip whitespace to handle URLs with leading/trailing spaces
             repo_url_or_path = repo_url_or_path.strip()
             
-            root_path = get_adalflow_default_root_path()
+            # Persistent root (GCS FUSE mount or local disk)
+            # Use strict /root/.adalflow if it exists (GCS mount), otherwise fall back to default
+            if os.path.exists("/root/.adalflow"):
+                persistent_root = "/root/.adalflow"
+            else:
+                persistent_root = get_adalflow_default_root_path()
+            
+            # Temporary root (fast ephemeral storage)
+            temp_root = tempfile.mkdtemp(prefix="deepwiki_proc_")
+            logger.info(f"Using temporary processing directory: {temp_root}")
 
-            os.makedirs(root_path, exist_ok=True)
-            # url
+            # Ensure persistent directories exist
+            os.makedirs(persistent_root, exist_ok=True)
+
+            # Determine repo name and paths
             if repo_url_or_path.startswith("https://") or repo_url_or_path.startswith("http://"):
-                # Extract the repository name from the URL
                 repo_name = self._extract_repo_name_from_url(repo_url_or_path, repo_type)
                 logger.info(f"Extracted repo name: {repo_name}")
-
-                save_repo_dir = os.path.join(root_path, "repos", repo_name)
-
-                # Check if the repository directory already exists and is not empty
-                if not (os.path.exists(save_repo_dir) and os.listdir(save_repo_dir)):
-                    # Only download if the repository doesn't exist or is empty
-                    download_repo(repo_url_or_path, save_repo_dir, repo_type, access_token)
+                
+                # Paths
+                persistent_repo_dir = os.path.join(persistent_root, "repos", repo_name)
+                temp_repo_dir = os.path.join(temp_root, "repos", repo_name)
+                
+                # Check persistent storage
+                if os.path.exists(persistent_repo_dir) and os.listdir(persistent_repo_dir):
+                    logger.info(f"Found existing repository in persistent storage. Copying to temp...")
+                    shutil.copytree(persistent_repo_dir, temp_repo_dir, dirs_exist_ok=True)
+                    
+                    # Verify copy
+                    files_copied = len(glob.glob(f"{temp_repo_dir}/**/*", recursive=True))
+                    logger.info(f"Copy finished. Found {files_copied} items in temporary repo directory.")
                 else:
-                    logger.info(f"Repository already exists at {save_repo_dir}. Using existing repository.")
-            else:  # local path
+                    logger.info(f"Cloning repository to temporary storage...")
+                    download_repo(repo_url_or_path, temp_repo_dir, repo_type, access_token)
+                    
+                    # Verify clone
+                    files_cloned = len(glob.glob(f"{temp_repo_dir}/**/*", recursive=True))
+                    logger.info(f"Clone finished. Found {files_cloned} items in temporary repo directory.")
+            else:
+                # Local path case (less relevant for Cloud Run but good to handle)
                 repo_name = os.path.basename(repo_url_or_path)
-                save_repo_dir = repo_url_or_path
+                persistent_repo_dir = repo_url_or_path
+                temp_repo_dir = repo_url_or_path # Use original path for local files
 
-            save_db_file = os.path.join(root_path, "databases", f"{repo_name}.pkl")
-            os.makedirs(save_repo_dir, exist_ok=True)
-            os.makedirs(os.path.dirname(save_db_file), exist_ok=True)
+            persistent_db_file = os.path.join(persistent_root, "databases", f"{repo_name}.pkl")
+            temp_db_file = os.path.join(temp_root, "databases", f"{repo_name}.pkl")
 
+            # Copy existing DB to temp if it exists
+            if os.path.exists(persistent_db_file):
+                logger.info(f"Found existing database. Copying to temp...")
+                os.makedirs(os.path.dirname(temp_db_file), exist_ok=True)
+                shutil.copy2(persistent_db_file, temp_db_file)
+
+            # Setup paths
             self.repo_paths = {
-                "save_repo_dir": save_repo_dir,
-                "save_db_file": save_db_file,
+                "save_repo_dir": temp_repo_dir,
+                "save_db_file": temp_db_file,
             }
+            self.persistent_paths = {
+                "save_repo_dir": persistent_repo_dir,
+                "save_db_file": persistent_db_file
+            }
+            
             self.repo_url_or_path = repo_url_or_path
-            logger.info(f"Repo paths: {self.repo_paths}")
+            logger.info(f"Repo paths (temp): {self.repo_paths}")
+            logger.info(f"Persistent paths: {self.persistent_paths}")
 
         except Exception as e:
             logger.error(f"Failed to create repository structure: {e}")
             raise
+
+    def _sync_to_persistent(self):
+        """
+        Syncs the temporary database and repository back to persistent storage.
+        """
+        if not self.persistent_paths or not self.repo_paths:
+            return
+
+        try:
+            logger.info("Syncing data to persistent storage...")
+            
+            # Sync DB file
+            temp_db = self.repo_paths["save_db_file"]
+            pers_db = self.persistent_paths["save_db_file"]
+            
+            if os.path.exists(temp_db):
+                logger.info(f"Syncing database: {temp_db} -> {pers_db}")
+                os.makedirs(os.path.dirname(pers_db), exist_ok=True)
+                shutil.copy2(temp_db, pers_db)
+            
+            # Sync Repo files (if downloaded fresh)
+            temp_repo = self.repo_paths["save_repo_dir"]
+            pers_repo = self.persistent_paths["save_repo_dir"]
+            
+            # Only sync repo if it doesn't exist in persistent storage or if we want to update it
+            # For now, we only sync if persistent doesn't exist to save bandwidth
+            if os.path.exists(temp_repo) and not (os.path.exists(pers_repo) and os.listdir(pers_repo)):
+                logger.info(f"Syncing repository: {temp_repo} -> {pers_repo}")
+                # copytree requires destination to not exist usually, or use dirs_exist_ok
+                shutil.copytree(temp_repo, pers_repo, dirs_exist_ok=True)
+                
+            logger.info("Sync completed successfully.")
+            
+        except Exception as e:
+            logger.error(f"Error syncing to persistent storage: {e}")
+            # Don't raise, as we still want to return the result to the user
 
     def prepare_db_index(self, embedder_type: str = None, is_ollama_embedder: bool = None, 
                         excluded_dirs: List[str] = None, excluded_files: List[str] = None,

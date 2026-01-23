@@ -138,5 +138,11 @@
     "browseExisting": "Browse Existing Projects",
     "existingProjects": "Existing Projects",
     "recentProjects": "Recent Projects"
+  },
+  "mermaid": {
+    "title": "Diagram Display",
+    "renderingError": "Diagram Rendering Error",
+    "syntaxError": "Syntax error in diagram, cannot render.",
+    "rendering": "Rendering diagram..."
   }
 }

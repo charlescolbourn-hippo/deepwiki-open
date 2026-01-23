@@ -129,5 +129,11 @@
     "browseExisting": "既存プロジェクトを閲覧",
     "existingProjects": "既存プロジェクト",
     "recentProjects": "最近のプロジェクト"
+  },
+  "mermaid": {
+    "title": "図表表示",
+    "renderingError": "図表レンダリングエラー",
+    "syntaxError": "図表に構文エラーがあり、レンダリングできません。",
+    "rendering": "図表を描画中..."
   }
 }
