@@ -1,0 +1,90 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  annotations:
+    run.googleapis.com/client-name: cloud-console
+    run.googleapis.com/iap-enabled: 'true'
+    run.googleapis.com/ingress: all
+    run.googleapis.com/ingress-status: all
+    run.googleapis.com/invoker-iam-disabled: 'true'
+    run.googleapis.com/launch-stage: BETA
+    run.googleapis.com/maxScale: '100'
+    run.googleapis.com/operation-id: 87c25f41-1ce3-45aa-8edb-77ee2d331815
+    run.googleapis.com/urls: '["https://deepwiki-open-169327681582.europe-west2.run.app","https://deepwiki-open-3fv2vvtyla-nw.a.run.app"]'
+    serving.knative.dev/creator: harvinder.atwal@hippodigital.co.uk
+    serving.knative.dev/lastModifier: harvinder.atwal@hippodigital.co.uk
+  labels:
+    cloud.googleapis.com/location: europe-west2
+    run.googleapis.com/satisfiesPzs: 'true'
+  name: deepwiki-open
+  namespace: '169327681582'
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: '100'
+        run.googleapis.com/client-name: gcloud
+        run.googleapis.com/client-version: 537.0.0
+        run.googleapis.com/startup-cpu-boost: 'true'
+      labels:
+        client.knative.dev/nonce: gjaamopmnw
+        run.googleapis.com/startupProbeType: Default
+    spec:
+      containerConcurrency: 80
+      containers:
+      - image: europe-west2-docker.pkg.dev/deepwiki-hippowiki/cloud-run-source-deploy/deepwiki-open/deepwiki-open-frontend:latest
+        name: deepwiki-open-frontend-1
+        ports:
+        - containerPort: 3000
+          name: http1
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 512Mi
+        startupProbe:
+          failureThreshold: 1
+          periodSeconds: 240
+          tcpSocket:
+            port: 3000
+          timeoutSeconds: 240
+      - env:
+        - name: DEEPWIKI_WIKI_CACHE_DIR
+          value: /mnt/deepwiki-data/wikicache
+        - name: ADALFLOW_HOME
+          value: /tmp/.adalflow
+        - name: DEEPWIKI_EMBEDDER_TYPE
+          value: google
+        - name: GOOGLE_API_KEY
+          value: YOUR_GOOGLE_API_KEY_HERE
+        - name: OPENAI_API_KEY
+          value: YOUR_OPENAI_API_KEY_HERE
+        - name: LOG_LEVEL
+          value: DEBUG
+        image: europe-west2-docker.pkg.dev/deepwiki-hippowiki/cloud-run-source-deploy/deepwiki-open/deepwiki-open-api:latest
+        name: deepwiki-open-api-1
+        resources:
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 10
+          timeoutSeconds: 10
+          periodSeconds: 10
+          failureThreshold: 10
+        volumeMounts:
+        - mountPath: /mnt/deepwiki-data
+          name: adalflow-storage
+      serviceAccountName: 169327681582-compute@developer.gserviceaccount.com
+      timeoutSeconds: 300
+      volumes:
+      - csi:
+          driver: gcsfuse.run.googleapis.com
+          volumeAttributes:
+            bucketName: deepwiki-data-europe-west2
+        name: adalflow-storage
+  traffic:
+  - latestRevision: true
+    percent: 100

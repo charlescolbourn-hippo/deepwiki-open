@@ -543,10 +543,12 @@ Remember:
         let content = '';
 
         try {
-          // Create WebSocket URL from the server base URL
-          const serverBaseUrl = process.env.SERVER_BASE_URL || 'http://localhost:8001';
-          const wsBaseUrl = serverBaseUrl.replace(/^http/, 'ws')? serverBaseUrl.replace(/^https/, 'wss'): serverBaseUrl.replace(/^http/, 'ws');
-          const wsUrl = `${wsBaseUrl}/ws/chat`;
+          // Create WebSocket URL dynamically based on current location
+          let wsUrl = 'ws://localhost:8001/ws/chat';
+          if (typeof window !== 'undefined') {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            wsUrl = `${protocol}//${window.location.host}/ws/chat`;
+          }
 
           // Create a new WebSocket connection
           const ws = new WebSocket(wsUrl);
@@ -680,6 +682,51 @@ Remember:
     });
   }, [generatedPages, currentToken, effectiveRepoInfo, selectedProviderState, selectedModelState, isCustomSelectedModelState, customSelectedModelState, modelExcludedDirs, modelExcludedFiles, language, activeContentRequests, generateFileUrl]);
 
+  // Helper function to prune file tree
+  const pruneFileTree = (fileTree: string, maxLines: number = 2000): string => {
+    const lines = fileTree.split('\n');
+    
+    // 1. Filter out likely asset files to reduce noise
+    const assetExtensions = [
+      '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp', '.bmp', // Images
+      '.ttf', '.otf', '.woff', '.woff2', '.eot', // Fonts
+      '.mp3', '.mp4', '.wav', '.avi', '.mov', // Media
+      '.zip', '.tar', '.gz', '.rar', '.7z', // Archives
+      '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', // Documents (binary)
+      '.exe', '.dll', '.so', '.dylib', '.class', '.pyc' // Binaries
+    ];
+    
+    let filteredLines = lines.filter(line => {
+      const lowerLine = line.toLowerCase();
+      return !assetExtensions.some(ext => lowerLine.endsWith(ext));
+    });
+
+    // 2. If still too large, limit by depth and count
+    if (filteredLines.length > maxLines) {
+      // Sort by depth (shorter paths first usually implies higher level)
+      // But we also want to keep some structure. 
+      // A simple heuristic: Keep all files at depth 0-2, then sample deeper ones?
+      // Or just take the first N lines after asset filtering? 
+      // Let's prioritize root files and essential config/source directories.
+      
+      // Calculate depth
+      const getDepth = (path: string) => path.split('/').length;
+      
+      // Sort by depth (ascending) to prioritize higher-level files
+      // This changes the order, but for "structure determination", the hierarchy is key.
+      // However, typical file trees are depth-first. 
+      // Let's just truncate for now, but maybe prioritize keeping directories? 
+      // The current input is just file paths.
+      
+      // Let's just take the first maxLines to ensure we don't exceed limits
+      // But add a note that it's truncated
+      filteredLines = filteredLines.slice(0, maxLines);
+      filteredLines.push('... (truncated list of files)');
+    }
+    
+    return filteredLines.join('\n');
+  };
+
   // Determine the wiki structure from repository data
   const determineWikiStructure = useCallback(async (fileTree: string, readme: string, owner: string, repo: string) => {
     if (!owner || !repo) {
@@ -699,6 +746,10 @@ Remember:
       setStructureRequestInProgress(true);
       setLoadingMessage(messages.loading?.determiningStructure || 'Determining wiki structure...');
 
+      // Prune file tree to avoid token limits
+      const prunedFileTree = pruneFileTree(fileTree);
+      console.log(`Pruned file tree from ${fileTree.split('\n').length} to ${prunedFileTree.split('\n').length} lines`);
+
       // Get repository URL
       const repoUrl = getRepoUrl(effectiveRepoInfo);
 
@@ -713,7 +764,7 @@ content: `Analyze this GitHub repository ${owner}/${repo} and create a wiki stru
 
 1. The complete file tree of the project:
 <file_tree>
-${fileTree}
+${prunedFileTree}
 </file_tree>
 
 2. The README file of the project:
@@ -840,10 +891,12 @@ IMPORTANT:
       let responseText = '';
 
       try {
-        // Create WebSocket URL from the server base URL
-        const serverBaseUrl = process.env.SERVER_BASE_URL || 'http://localhost:8001';
-        const wsBaseUrl = serverBaseUrl.replace(/^http/, 'ws')? serverBaseUrl.replace(/^https/, 'wss'): serverBaseUrl.replace(/^http/, 'ws');
-        const wsUrl = `${wsBaseUrl}/ws/chat`;
+        // Create WebSocket URL dynamically based on current location
+        let wsUrl = 'ws://localhost:8001/ws/chat';
+        if (typeof window !== 'undefined') {
+          const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+          wsUrl = `${protocol}//${window.location.host}/ws/chat`;
+        }
 
         // Create a new WebSocket connection
         const ws = new WebSocket(wsUrl);
@@ -945,7 +998,12 @@ IMPORTANT:
       // Extract wiki structure from response
       const xmlMatch = responseText.match(/<wiki_structure>[\s\S]*?<\/wiki_structure>/m);
       if (!xmlMatch) {
-        throw new Error('No valid XML found in response');
+        console.error('Failed to parse XML from response. Raw response:', responseText);
+        // Check for specific error patterns in the text
+        if (responseText.startsWith('Error:') || responseText.includes('Error:')) {
+             throw new Error(`API Error: ${responseText}`);
+        }
+        throw new Error('No valid XML found in response. The model may have failed to follow the format instructions or the request timed out.');
       }
 
       let xmlText = xmlMatch[0];

@@ -241,6 +241,7 @@ IMPORTANT FORMATTING RULES:
             model_client=generator_config["model_client"](),
             model_kwargs=generator_config["model_kwargs"],
             output_processors=data_parser,
+            use_cache=False,
         )
 
 

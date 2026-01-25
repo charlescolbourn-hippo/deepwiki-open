@@ -49,7 +49,15 @@ WIKI_AUTH_MODE = raw_auth_mode.lower() in ['true', '1', 't']
 WIKI_AUTH_CODE = os.environ.get('DEEPWIKI_AUTH_CODE', '')
 
 # Embedder settings
-EMBEDDER_TYPE = os.environ.get('DEEPWIKI_EMBEDDER_TYPE', 'openai').lower()
+EMBEDDER_TYPE = os.environ.get('DEEPWIKI_EMBEDDER_TYPE', '').lower()
+
+if not EMBEDDER_TYPE:
+    if OPENAI_API_KEY:
+        EMBEDDER_TYPE = 'openai'
+    elif GOOGLE_API_KEY:
+        EMBEDDER_TYPE = 'google'
+    else:
+        EMBEDDER_TYPE = 'openai' # Default fallback
 
 # Get configuration directory from environment variable, or use default if not set
 CONFIG_DIR = os.environ.get('DEEPWIKI_CONFIG_DIR', None)

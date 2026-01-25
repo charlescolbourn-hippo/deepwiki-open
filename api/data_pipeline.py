@@ -822,8 +822,11 @@ class DatabaseManager:
             repo_url_or_path = repo_url_or_path.strip()
             
             # Persistent root (GCS FUSE mount or local disk)
-            # Use strict /root/.adalflow if it exists (GCS mount), otherwise fall back to default
-            if os.path.exists("/root/.adalflow"):
+            # Prioritize the new GCS mount point
+            if os.path.exists("/mnt/deepwiki-data"):
+                persistent_root = "/mnt/deepwiki-data"
+            # Use strict /root/.adalflow if it exists (legacy GCS mount or local), otherwise fall back to default
+            elif os.path.exists("/root/.adalflow"):
                 persistent_root = "/root/.adalflow"
             else:
                 persistent_root = get_adalflow_default_root_path()

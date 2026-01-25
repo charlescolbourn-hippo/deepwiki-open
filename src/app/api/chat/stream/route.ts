@@ -15,17 +15,27 @@ export async function POST(req: NextRequest) {
     // This HTTP endpoint is kept for backward compatibility
     console.log('Using HTTP fallback for chat completion instead of WebSockets');
 
-    const targetUrl = `${TARGET_SERVER_BASE_URL}/chat/completions/stream`;
-
     // Make the actual request to the backend service
-    const backendResponse = await fetch(targetUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'text/event-stream', // Indicate that we expect a stream
-      },
-      body: JSON.stringify(requestBody),
-    });
+    const targetUrl = `${TARGET_SERVER_BASE_URL}/chat/completions/stream`;
+    
+    // Set a long timeout (20 minutes) to allow for RAG processing and LLM generation time
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1200000); // 1200 seconds
+
+    let backendResponse;
+    try {
+      backendResponse = await fetch(targetUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream', // Indicate that we expect a stream
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     // If the backend service returned an error, forward that error to the client
     if (!backendResponse.ok) {

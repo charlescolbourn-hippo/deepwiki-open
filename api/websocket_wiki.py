@@ -66,10 +66,13 @@ async def handle_websocket_chat(websocket: WebSocket):
     This replaces the HTTP streaming endpoint with a WebSocket connection.
     """
     await websocket.accept()
+    client_host = websocket.client.host if websocket.client else "unknown"
+    logger.info(f"WebSocket connection accepted from {client_host}")
 
     try:
         # Receive and parse the request data
         request_data = await websocket.receive_json()
+        logger.info(f"WebSocket received request data from {client_host}")
         request = ChatCompletionRequest(**request_data)
 
         # Check if request contains very large input
@@ -438,6 +441,9 @@ This file contains...
         prompt += f"<query>\n{query}\n</query>\n\nAssistant: "
 
         model_config = get_model_config(request.provider, request.model)["model_kwargs"]
+        
+        logger.info(f"Starting streaming response with provider: {request.provider}, model: {request.model}")
+        chunks_count = 0
 
         if request.provider == "ollama":
             prompt += " /no_think"
@@ -580,6 +586,8 @@ This file contains...
                     if text and not text.startswith('model=') and not text.startswith('created_at='):
                         text = text.replace('<think>', '').replace('</think>', '')
                         await websocket.send_text(text)
+                        chunks_count += 1
+                logger.info(f"Ollama streaming completed, sent {chunks_count} chunks")
                 # Explicitly close the WebSocket connection after the response is complete
                 await websocket.close()
             elif request.provider == "openrouter":
@@ -590,6 +598,8 @@ This file contains...
                     # Handle streaming response from OpenRouter
                     async for chunk in response:
                         await websocket.send_text(chunk)
+                        chunks_count += 1
+                    logger.info(f"OpenRouter streaming completed, sent {chunks_count} chunks")
                     # Explicitly close the WebSocket connection after the response is complete
                     await websocket.close()
                 except Exception as e_openrouter:
@@ -612,6 +622,8 @@ This file contains...
                                 text = getattr(delta, "content", None)
                                 if text is not None:
                                     await websocket.send_text(text)
+                                    chunks_count += 1
+                    logger.info(f"OpenAI streaming completed, sent {chunks_count} chunks")
                     # Explicitly close the WebSocket connection after the response is complete
                     await websocket.close()
                 except Exception as e_openai:
@@ -626,8 +638,11 @@ This file contains...
                     response = await model.acall(api_kwargs=api_kwargs, model_type=ModelType.LLM)
                     if isinstance(response, str):
                         await websocket.send_text(response)
+                        chunks_count += 1
                     else:
                         await websocket.send_text(str(response))
+                        chunks_count += 1
+                    logger.info(f"Bedrock streaming completed, sent {chunks_count} chunks")
                     await websocket.close()
                 except Exception as e_bedrock:
                     logger.error(f"Error with AWS Bedrock API: {str(e_bedrock)}")
@@ -652,6 +667,8 @@ This file contains...
                                 text = getattr(delta, "content", None)
                                 if text is not None:
                                     await websocket.send_text(text)
+                                    chunks_count += 1
+                    logger.info(f"Azure AI streaming completed, sent {chunks_count} chunks")
                     # Explicitly close the WebSocket connection after the response is complete
                     await websocket.close()
                 except Exception as e_azure:
@@ -672,6 +689,8 @@ This file contains...
                     async for text in response:
                         if text:
                             await websocket.send_text(text)
+                            chunks_count += 1
+                    logger.info(f"Dashscope streaming completed, sent {chunks_count} chunks")
                     # Explicitly close the WebSocket connection after the response is complete
                     await websocket.close()
                 except Exception as e_dashscope:
@@ -686,10 +705,13 @@ This file contains...
                     await websocket.close()
             else:
                 # Google Generative AI (default provider)
+                logger.info("Making Google GenAI call")
                 response = model.generate_content(prompt, stream=True)
                 for chunk in response:
                     if hasattr(chunk, 'text'):
                         await websocket.send_text(chunk.text)
+                        chunks_count += 1
+                logger.info(f"Google GenAI streaming completed, sent {chunks_count} chunks")
                 await websocket.close()
 
         except Exception as e_outer:
@@ -885,7 +907,7 @@ This file contains...
                 await websocket.close()
 
     except WebSocketDisconnect:
-        logger.info("WebSocket disconnected")
+        logger.info("WebSocket disconnected by client")
     except Exception as e:
         logger.error(f"Error in WebSocket handler: {str(e)}")
         try:

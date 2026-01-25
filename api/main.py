@@ -44,7 +44,7 @@ if is_development:
 import uvicorn
 
 # Check for required environment variables
-required_env_vars = ['GOOGLE_API_KEY', 'OPENAI_API_KEY']
+required_env_vars = ['GOOGLE_API_KEY']
 missing_vars = [var for var in required_env_vars if not os.environ.get(var)]
 if missing_vars:
     logger.warning(f"Missing environment variables: {', '.join(missing_vars)}")
@@ -52,16 +52,20 @@ if missing_vars:
 
 # Configure Google Generative AI
 logger.warning("importing the google libs")
-import google.generativeai as genai
-logger.warning("imported the google libs")
-from api.config import GOOGLE_API_KEY
+try:
+    import google.generativeai as genai
+    logger.warning("imported the google libs")
+    from api.config import GOOGLE_API_KEY
 
-if GOOGLE_API_KEY:
-    logger.info("Starting the google ai")
-    genai.configure(api_key=GOOGLE_API_KEY)
-    logger.info("Started the google ai")
-else:
-    logger.warning("GOOGLE_API_KEY not configured")
+    if GOOGLE_API_KEY:
+        logger.info("Starting the google ai")
+        genai.configure(api_key=GOOGLE_API_KEY)
+        logger.info("Started the google ai")
+    else:
+        logger.warning("GOOGLE_API_KEY not configured")
+except Exception as e:
+    logger.error(f"Error configuring Google Generative AI: {e}", exc_info=True)
+
 
 logger.info("About to start the backend")
 if __name__ == "__main__":
@@ -73,13 +77,15 @@ if __name__ == "__main__":
     logger.info("Importing app")
     from api.api import app
 
-    logger.info(f"Starting Streaming API on port {port}")
+    logger.info(f"Starting Streaming API on port {port} with Uvicorn...")
 
     # Run the FastAPI app with uvicorn
     uvicorn.run(
         "api.api:app",
         host="0.0.0.0",
         port=port,
-        reload=is_development,
+        reload=False,
         reload_excludes=["**/logs/*", "**/__pycache__/*", "**/*.pyc"] if is_development else None,
+        timeout_keep_alive=1200,
     )
+    logger.info("Uvicorn.run call completed.")
