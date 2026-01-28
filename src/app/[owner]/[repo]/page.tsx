@@ -482,6 +482,13 @@ Based ONLY on the content of the \`[RELEVANT_SOURCE_FILES]\`:
          - Add notes for clarification: "Note over A,B: Description", "Note right of A: Detail"
          - Use autonumber directive to add sequence numbers to messages
          - NEVER use flowchart-style labels like A--|label|-->B. Always use a colon for labels: A->>B: My Label
+    *   **CRITICAL FORMATTING:** You MUST wrap ALL Mermaid diagram syntax in triple backticks with the \`mermaid\` language identifier.
+        Example:
+        \`\`\`mermaid
+        graph TD
+          A --> B
+        \`\`\`
+        **DO NOT** output the diagram syntax as plain text. It MUST be inside a \`mermaid\` code block.
 
 4.  **Tables:**
     *   Use Markdown tables to summarize information such as:

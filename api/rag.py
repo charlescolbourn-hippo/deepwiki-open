@@ -270,6 +270,11 @@ IMPORTANT FORMATTING RULES:
 
         # First pass: collect all embedding sizes and count occurrences
         for i, doc in enumerate(documents):
+            # Fallback: check for 'embedding' attribute if 'vector' is missing
+            if (not hasattr(doc, 'vector') or doc.vector is None) and hasattr(doc, 'embedding') and doc.embedding is not None:
+                doc.vector = doc.embedding
+                logger.warning(f"Document {i} has 'embedding' but no 'vector'. Copied 'embedding' to 'vector'.")
+
             if not hasattr(doc, 'vector') or doc.vector is None:
                 logger.warning(f"Document {i} has no embedding vector, skipping")
                 continue
@@ -296,7 +301,7 @@ IMPORTANT FORMATTING RULES:
                 continue
 
         if not embedding_sizes:
-            logger.error("No valid embeddings found in any documents")
+            logger.error("No valid embeddings found in any documents. This usually indicates an issue with the embedding model (e.g., API rate limits, authentication errors, or model availability). Please check your API keys and logs for earlier errors.")
             return []
 
         # Find the most common embedding size (this should be the correct one)

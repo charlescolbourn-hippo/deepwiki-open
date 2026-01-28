@@ -19,6 +19,18 @@ Key configurations included:
 *   Environment variable injection for secrets (API Keys) and configuration.
 *   GCS Fuse volume mounts for persistent storage (`deepwiki-data`).
 
+### Deployment Workflow
+
+For consistent deployments, the following workflow is used:
+1.  **Container Build**: Images are built remotely using Google Cloud Build to ensure environment consistency (e.g., using `cloudbuild.frontend.yaml` for the frontend).
+    ```bash
+    gcloud builds submit --config cloudbuild.frontend.yaml .
+    ```
+2.  **Service Update**: The Cloud Run service is updated using the declarative `service.yaml` file.
+    ```bash
+    gcloud run services replace service.yaml --region europe-west2
+    ```
+
 ## Consequences
 
 ### Positive

@@ -5,7 +5,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 
 // Initialize mermaid with defaults - Japanese aesthetic
 mermaid.initialize({
-  startOnLoad: true,
+  startOnLoad: false,
   theme: 'neutral',
   securityLevel: 'loose',
   suppressErrorRendering: true,

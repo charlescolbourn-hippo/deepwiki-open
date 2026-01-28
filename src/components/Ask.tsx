@@ -415,7 +415,24 @@ const Ask: React.FC<AskProps> = ({
       });
 
       if (!apiResponse.ok) {
-        throw new Error(`API error: ${apiResponse.status}`);
+        let errorMessage = `API error: ${apiResponse.status}`;
+        try {
+          const errorData = await apiResponse.json();
+          if (errorData && errorData.detail) {
+            errorMessage = errorData.detail;
+          }
+        } catch (e) {
+          // If JSON parsing fails, try reading as text
+          try {
+            const errorText = await apiResponse.text();
+            if (errorText) {
+              errorMessage = errorText;
+            }
+          } catch (textError) {
+             // Ignore text reading error
+          }
+        }
+        throw new Error(errorMessage);
       }
 
       // Process the streaming response
@@ -472,7 +489,11 @@ const Ask: React.FC<AskProps> = ({
       }
     } catch (error) {
       console.error('Error during HTTP fallback:', error);
-      setResponse(prev => prev + '\n\nError: Failed to get a response. Please try again.');
+      let errorMessage = 'Failed to get a response. Please try again.';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      setResponse(prev => prev + `\n\nError: ${errorMessage}`);
       setResearchComplete(true);
     } finally {
       setIsLoading(false);

@@ -78,7 +78,7 @@ spec:
         - mountPath: /mnt/deepwiki-data
           name: adalflow-storage
       serviceAccountName: 169327681582-compute@developer.gserviceaccount.com
-      timeoutSeconds: 300
+      timeoutSeconds: 3600
       volumes:
       - csi:
           driver: gcsfuse.run.googleapis.com

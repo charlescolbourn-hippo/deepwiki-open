@@ -1,0 +1,5 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', 'europe-west2-docker.pkg.dev/deepwiki-hippowiki/cloud-run-source-deploy/deepwiki-open/deepwiki-open-api:latest', '-f', 'Dockerfile.api', '.']
+images:
+- 'europe-west2-docker.pkg.dev/deepwiki-hippowiki/cloud-run-source-deploy/deepwiki-open/deepwiki-open-api:latest'

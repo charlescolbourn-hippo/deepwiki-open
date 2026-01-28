@@ -399,10 +399,15 @@ class OpenAIClient(ModelClient):
 
     @backoff.on_exception(
         backoff.expo,
+        (RateLimitError,),
+        max_time=60,
+        jitter=backoff.full_jitter,
+    )
+    @backoff.on_exception(
+        backoff.expo,
         (
             APITimeoutError,
             InternalServerError,
-            RateLimitError,
             UnprocessableEntityError,
             BadRequestError,
         ),
