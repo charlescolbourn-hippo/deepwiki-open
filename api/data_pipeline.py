@@ -960,8 +960,52 @@ class DatabaseManager:
                 self.db = LocalDB.load_state(self.repo_paths["save_db_file"])
                 documents = self.db.get_transformed_data(key="split_and_embed")
                 if documents:
-                    logger.info(f"Loaded {len(documents)} documents from existing database")
-                    return documents
+                    # Validate embeddings before returning
+                    # Check ALL documents to ensure database integrity
+                    total_docs = len(documents)
+                    valid_count = 0
+                    
+                    for i, doc in enumerate(documents):
+                        # Check for vector attribute and that it's not None/empty
+                        # Also check 'embedding' attribute as fallback
+                        has_vector = False
+                        vector_val = None
+                        
+                        if hasattr(doc, 'vector') and doc.vector is not None:
+                            vector_val = doc.vector
+                            has_vector = True
+                        elif hasattr(doc, 'embedding') and doc.embedding is not None:
+                            vector_val = doc.embedding
+                            has_vector = True
+                            
+                        if has_vector:
+                            # Check structure
+                            if hasattr(vector_val, '__len__') and len(vector_val) > 0:
+                                # Ensure it's not just a list of Nones
+                                if isinstance(vector_val, list) and len(vector_val) > 0 and vector_val[0] is None:
+                                     pass # Invalid
+                                else:
+                                     valid_count += 1
+                            elif hasattr(vector_val, 'shape'): # numpy array
+                                valid_count += 1
+                    
+                    invalid_count = total_docs - valid_count
+                    logger.info(f"DB INTEGRITY CHECK: Found {valid_count}/{total_docs} valid embeddings. ({invalid_count} invalid)")
+
+                    # Aggressive regeneration policy:
+                    # If more than 50% are invalid, OR if we have 0 valid embeddings, regenerate.
+                    failure_threshold = 0.5 
+                    if valid_count == 0 or (invalid_count / total_docs > failure_threshold):
+                        logger.warning(f"Database integrity check FAILED. Valid: {valid_count}, Total: {total_docs}. Regenerating database...")
+                        # Delete the corrupted file to ensure a clean slate
+                        try:
+                            os.remove(self.repo_paths["save_db_file"])
+                            logger.info(f"Deleted corrupted database file: {self.repo_paths['save_db_file']}")
+                        except Exception as del_e:
+                            logger.warning(f"Failed to delete corrupted DB file: {del_e}")
+                    else:
+                        logger.info(f"Loaded {len(documents)} documents from existing database (Integrity check passed)")
+                        return documents
             except Exception as e:
                 logger.error(f"Error loading existing database: {e}")
                 # Continue to create a new database

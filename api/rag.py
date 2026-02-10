@@ -275,6 +275,12 @@ IMPORTANT FORMATTING RULES:
                 doc.vector = doc.embedding
                 logger.warning(f"Document {i} has 'embedding' but no 'vector'. Copied 'embedding' to 'vector'.")
 
+            # DEBUG LOGGING for first few docs
+            if i < 5:
+                 val_type = type(doc.vector) if hasattr(doc, 'vector') else 'missing'
+                 val_repr = str(doc.vector)[:50] if hasattr(doc, 'vector') and doc.vector is not None else 'None'
+                 logger.info(f"DEBUG RAG CHECK: Doc {i}: vector_type={val_type}, vector_sample={val_repr}")
+
             if not hasattr(doc, 'vector') or doc.vector is None:
                 logger.warning(f"Document {i} has no embedding vector, skipping")
                 continue

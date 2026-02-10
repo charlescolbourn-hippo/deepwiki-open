@@ -455,6 +455,12 @@ Based ONLY on the content of the \`[RELEVANT_SOURCE_FILES]\`:
        - Use "graph TD" (top-down) directive for flow diagrams
        - NEVER use "graph LR" (left-right)
        - Maximum node width should be 3-4 words
+       - CRITICAL SYNTAX RULES:
+         - NEVER put spaces inside arrow definitions (e.g., use "-->", "->>", "-->>" NOT "-- >", "- >>", "-- >>").
+         - ALWAYS quote node labels that contain special characters (like {}, [], (), /, -) or spaces: A["Label with spaces"] --> B["POST /path/{id}"]
+         - Escape double quotes inside labels: A["Say \"Hello\""]
+         - Do not use brackets [] {} () inside labels unless the label is quoted.
+         - In flowcharts (graph TD), do NOT use "database" or "queue" keywords. Use node shapes: DB[(Database Name)] for databases.
        - For sequence diagrams:
          - Start with "sequenceDiagram" directive on its own line
          - Define ALL participants at the beginning using "participant" keyword

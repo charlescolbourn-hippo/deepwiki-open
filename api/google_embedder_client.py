@@ -210,6 +210,12 @@ class GoogleEmbedderClient(ModelClient):
             
         log.info(f"Google AI Embeddings API kwargs: {api_kwargs}")
         
+        # Handle empty inputs gracefully
+        if "content" not in api_kwargs and "contents" not in api_kwargs:
+            log.warning("No content provided to GoogleEmbedderClient.call, returning empty response")
+            # Return a structure that parse_embedding_response can handle as empty
+            return {"embedding": []}
+
         try:
             # Use embed_content for single text or batch embedding
             if "content" in api_kwargs:
